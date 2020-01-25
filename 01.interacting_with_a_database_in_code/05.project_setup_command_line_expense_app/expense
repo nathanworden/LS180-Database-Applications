@@ -1,15 +1,18 @@
 #! /usr/bin/env ruby
 
 require "pg"
+require "io/console"
 
 class ExpenseData
   def initialize
     @connection = PG.connect(dbname: "expenses")
+    setup_schema
   end
 
   def list_expenses
     result = @connection.exec("SELECT * FROM expenses ORDER BY created_on ASC")
-    display_expenses(result)
+    display_count(result)
+    display_expenses(result) if result.ntuples > 0
   end
   
   def add_expense(amount, memo)
@@ -21,7 +24,8 @@ class ExpenseData
   def search_expenses(query)
     sql = "SELECT * FROM expenses WHERE memo ILIKE $1"
     result = @connection.exec_params(sql, ["%#{query}%"])
-    display_expenses(result)
+    display_count(result)
+    display_expenses(result) if result.ntuples > 0
   end
 
   def delete_expense(id)
@@ -35,15 +39,25 @@ class ExpenseData
       puts "The following expense has been deleted:"
       display_expenses(result)
     else
-      puts "There is no expense with the id #{id}" unless result
+      puts "There is no expense with the id '#{id}'"
     end
   end
 
   def delete_all_expenses
-
+    @connection.exec("DELETE FROM expenses")
+    puts "All expenses have been deleted."
   end
 
   private
+
+  def display_count(expenses)
+    count = expenses.ntuples
+    if count == 0
+      puts "There are no expenses" 
+    else
+      puts "There are #{count} expense#{"s" if count != 1}."
+    end
+  end
 
   def display_expenses(expenses)
     expenses.each do |tuple|
@@ -53,6 +67,32 @@ class ExpenseData
                       tuple["memo"] ]
 
       puts columns.join(" | ")
+    end
+
+    puts "-" * 50
+
+    amount_sum = expenses.inject(0) do |sum, tuple|
+      sum + tuple["amount"].to_f
+    end
+
+    puts "Total #{amount_sum.round(2).to_s.rjust(25)}"
+  end
+
+  def setup_schema
+    result = @connection.exec <<~SQL
+      SELECT COUNT(*) FROM information_schema.tables 
+      WHERE table_schema = 'public' AND table_name = 'expenses';
+    SQL
+    
+    if result[0]["count"] == 0
+      @connection.exec <<~SQL
+        CREATE TABLE expenses (
+          id serial PRIMARY KEY, 
+          amount numeric(6, 2) NOT NULL CHECK (aount >= 0.01), 
+          memo text NOT NULL, 
+          created_on date NOT NULL
+        );
+      SQL
     end
   end
 end
@@ -70,10 +110,12 @@ class CLI
       memo = arguments[1]
       abort "You must provide an amount and memo." unless amount && memo
       @application.add_expense(amount, memo)
-    when "clear"
-      @application.delete_all_expenses
     when "delete"
       @application.delete_expense(arguments[0])
+    when "clear"
+      puts "This will remove all expenses. Are you sure? (y/n)"
+      response = $stdin.getch
+      @application.delete_all_expenses if response == 'y'
     when "list"
       @application.list_expenses
     when "search"
