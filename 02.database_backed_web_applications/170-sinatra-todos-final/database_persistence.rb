@@ -33,7 +33,7 @@ class DatabasePersistence
     end
   end
 
-  find_todos_for_list(list_id)
+  def find_todos_for_list(list_id)
     todo_sql = "SELECT * FROM todos WHERE list_id = $1"
     todos_result = query(todo_sql, list_id)
 
@@ -41,8 +41,7 @@ class DatabasePersistence
       {id: todo_tuple["id"].to_i, 
        name: todo_tuple["name"], 
        completed: todo_tuple["completed"] == "t" }
-      end
-
+    end
   end
 
   def create_new_list(list_name)
@@ -84,5 +83,4 @@ class DatabasePersistence
   end
 
   private
-
 end
