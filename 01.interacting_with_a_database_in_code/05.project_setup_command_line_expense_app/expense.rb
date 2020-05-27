@@ -45,5 +45,5 @@ elsif command == "add"
     add_expenses(amount, memo)
 else
   display_help
-end
+endd
 
